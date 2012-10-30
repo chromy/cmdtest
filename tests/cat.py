@@ -1,4 +1,3 @@
-from attest import Tests
 from cmdtest import Program, NonExistentFile
 
 cat = Program('cat')

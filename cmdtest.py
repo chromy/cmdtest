@@ -12,51 +12,70 @@ import attest
 # this one for our users
 from attest import *
 
+class Dir(object):
+    def __init__(self, path):
+        self.path = path
 
-d = None
-
+d = Dir(None)
 
 @contextmanager
 def tempdir(*args, **kwargs):
-    d = mkdtemp(*args, **kwargs)
+    path = mkdtemp(*args, **kwargs)
     try:
-        yield d
+        yield path
     finally:
-        rmtree(d)
+        rmtree(path)
 
+def withfile(path):
+    def wrapper(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            fullpath = os.path.abspath(path)
+            with File(path=fullpath) as f:
+                return func(f, *args, **kwargs)
+        return wrapped
+    return wrapper
 
 class File(object):
-    def __init__(self, contents='', name=None):
-        self.path = None
+    def __init__(self, text='', name=None, path=None):
+        self.path = os.path.abspath(path) if path else None
         self.name = name
-        self.contents = contents
+        self.text = text
+
+    def __enter__(self):
+        assert self.exists
+        return self
+
+    def __exit__(self, *args):
+        pass
 
     def create(self):
-        _, self.path = mkstemp(dir=d)
-        print self.path
-        with open(self.path, 'w') as f:
-            f.write(self.contents)
+        if not self.path:
+            _, self.path = mkstemp(dir=d.path)
+            with open(self.path, 'w') as f:
+                f.write(self.text)
 
-    @property
-    def argument(self):
+    def __str__(self):
         return self.path if self.path else ''
 
     def exists(self):
         try:
-            f = open(os.path.join(d, self.name))
+            thepath = self.path if self.path else os.path.join(d.path, self.name)
+            f = open(thepath)
         except IOError:
             return False
         else:
-            s = f.read()
-            f.close()
-            return s == self.contents
+            if self.text:
+                s = f.read()
+                f.close()
+                return s == self.text
+            return True
 
 class NonExistentFile(object):
     def __init__(self):
         self.path = None
 
-    @property
-    def argument(self):
+    def __str__(self):
         return self.path if self.path else ''
 
     def exists(self):
@@ -65,26 +84,30 @@ class NonExistentFile(object):
     def create(self):
         self.path = 'not_a_file'
 
-
-class Text(object):
-    def __init__(self, text):
-        self.argument = text
-
-    def create(self):
-        pass
-
-
 class Result(object):
-    def __init__(self, program, files):
-        for f in files:
-            f.create()
-        arguments = [f.argument for f in files]
+    def __init__(self, program, options):
+        for o in options:
+            try:
+                o.create()
+            except AttributeError:
+                pass
+        arguments = [str(o) for o in options]
         cmd = shlex.split(program)+list(arguments)
-        p = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=d)
+        print 'cmd:', cmd
+        print 'd', d.path
+
+        p = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=d.path)
 
         self.out, self.err = p.communicate()
         self.status = p.returncode
 
+def test(meth):
+    @wraps(meth)
+    def wrapper(self):
+        global d
+        with tempdir() as d.path:
+            meth(self)
+    return attest.test(wrapper)
 
 class Program(attest.Tests):
     def __init__(self, path, **kargs):
@@ -92,20 +115,13 @@ class Program(attest.Tests):
         self.path = path
 
     def __call__(self, *args):
-        files = []
-        for arg in args:
-            if isinstance(arg, basestring):
-                files.append(File(contents=arg))
-            else:
-                files.append(arg)
-        return Result(self.path, files)
+        return Result(self.path, args)
 
     def test(self, func):
         @wraps(func)
         def wrapper():
             global d
-            with tempdir() as d:
+            with tempdir() as d.path:
                 func()
-        wrapper.__wrapped__ = func
         return super(Program, self).test(wrapper)
 

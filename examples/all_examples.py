@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 from cmdtest import Tests
 import cat
 import head

@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 from shutil import rmtree
 from tempfile import mkdtemp, mkstemp
 from contextlib import contextmanager
+from time import time, sleep
 import shlex
 
 # this one for us
@@ -17,6 +18,9 @@ class Dir(object):
         self.path = path
 
 d = Dir(None)
+
+class TimeoutError(Exception):
+    pass
 
 @contextmanager
 def tempdir(*args, **kwargs):
@@ -84,22 +88,35 @@ class NonExistentFile(object):
     def create(self):
         self.path = 'not_a_file'
 
+
+def create_options(options):
+    for o in options:
+        try:
+            o.create()
+        except AttributeError:
+            pass
+
 class Result(object):
-    def __init__(self, program, options):
-        for o in options:
-            try:
-                o.create()
-            except AttributeError:
-                pass
+    def __init__(self, program, options, timeout):
+        self.timeout = timeout
+        create_options(options)
         arguments = [str(o) for o in options]
-        cmd = shlex.split(program)+list(arguments)
-        print 'cmd:', cmd
-        print 'd', d.path
 
+        cmd = shlex.split(program) + list(arguments)
         p = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=d.path)
-
+        start_time = time()
+        while p.poll() is None:
+            if time() > start_time + self.timeout:
+                p.kill()
+                raise TimeoutError()
+            sleep(0.01)
         self.out, self.err = p.communicate()
         self.status = p.returncode
+
+    def __lshift__(self, o):
+        print o
+        assert False
+        return self
 
 def test(meth):
     @wraps(meth)
@@ -114,8 +131,9 @@ class Program(attest.Tests):
         attest.Tests.__init__(self, **kargs)
         self.path = path
 
-    def __call__(self, *args):
-        return Result(self.path, args)
+    def __call__(self, *args, **kargs):
+        timeout = kargs.get('timeout', 0.1)
+        return Result(self.path, args, timeout)
 
     def test(self, func):
         @wraps(func)

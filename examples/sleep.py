@@ -10,7 +10,7 @@ def should_eventully_raise_timeout():
 
 @sleep.test
 def can_set_time_out():
-   assert sleep('0', timeout=0.5).status == 0
+   assert sleep('0', _timeout=0.5).status == 0
 
 if __name__ == '__main__':
     sleep.run()

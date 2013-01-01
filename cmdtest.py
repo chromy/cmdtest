@@ -97,20 +97,25 @@ def create_options(options):
             pass
 
 class Result(object):
-    def __init__(self, program, options, timeout):
+    def __init__(self, program, options, timeout, input):
         self.timeout = timeout
         create_options(options)
         arguments = [str(o) for o in options]
 
         cmd = shlex.split(program) + list(arguments)
-        p = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=d.path)
+        print cmd
+        p = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, cwd=d.path)
+        p.stdin.write(input)
+        p.stdin.flush()
+        p.stdin.close()
         start_time = time()
         while p.poll() is None:
             if time() > start_time + self.timeout:
                 p.kill()
                 raise TimeoutError()
             sleep(0.01)
-        self.out, self.err = p.communicate()
+        self.out = p.stdout.read()
+        self.err = p.stderr.read()
         self.status = p.returncode
 
     def __lshift__(self, o):
@@ -132,8 +137,9 @@ class Program(attest.Tests):
         self.path = path
 
     def __call__(self, *args, **kargs):
-        timeout = kargs.get('timeout', 0.1)
-        return Result(self.path, args, timeout)
+        _timeout = kargs.get('_timeout', 0.1)
+        _in = kargs.get('_in', '')
+        return Result(self.path, args, _timeout, _in)
 
     def test(self, func):
         @wraps(func)

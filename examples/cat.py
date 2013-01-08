@@ -4,25 +4,19 @@ cat = Program('cat')
 
 @cat.test
 def cat_should_echo_single_file():
-    a = File(text='hello')
-    assert cat(a).out == 'hello'
+    assert cat(File('hello')).out == 'hello'
 
 @cat.test
 def cat_should_combine_files():
-    a = File(text='hello')
-    b = File(text='world')
-    assert cat(a, b).out == 'helloworld'
+    assert cat(File('hello'), File('world')).out == 'helloworld'
 
 @cat.test
 def cat_should_not_write_to_stderr():
-    a = File(text='hello')
-    b = File(text='world')
-    assert cat(a, b).err == ''
+    assert cat(File('hello')).err == ''
 
 @cat.test
 def cat_should_succeed():
-    a = File(text='hello')
-    assert cat(a).status == 0
+    assert cat(File('hello')).status == 0
 
 @cat.test
 def cat_should_fail_with_bad_files():

@@ -1,5 +1,5 @@
 *.pyc
+docs/_build/
 dist
 MANIFEST
-README.rst
 
